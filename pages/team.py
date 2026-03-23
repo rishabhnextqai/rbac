@@ -68,7 +68,7 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
             "with their own isolated credential space."
         )
 
-        with st.form("invite_user", clear_on_submit=True):
+        with st.form("invite_user"):
             name = st.text_input("Full Name", placeholder="John Doe")
             email = st.text_input("Email", placeholder="john@nextq.ai")
             password = st.text_input("Temporary Password", type="password")
