@@ -27,6 +27,7 @@ AH_TOOL_PACK_ID = get_secret("AH_TOOL_PACK_ID")
 OPENAI_API_KEY = get_secret("OPENAI_API_KEY")
 
 # ── Init ──
+from database import USE_SUPABASE
 init_db()
 admin_email = get_secret("ADMIN_EMAIL", "admin@example.com")
 admin_name = get_secret("ADMIN_NAME", "Admin")
@@ -163,6 +164,8 @@ def main_app():
                 st.rerun()
 
         st.markdown("---")
+        db_badge = "🟢 Supabase" if USE_SUPABASE else "🟡 SQLite (ephemeral)"
+        st.caption(f"DB: {db_badge}")
         initials = "".join(w[0] for w in user["name"].split()[:2]).upper()
         role_badge = "🛡️ Admin" if is_admin else "👤 User"
         st.markdown(f"**{user['name']}**")
