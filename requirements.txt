@@ -1,4 +1,5 @@
 streamlit
 httpx
 openai
+anthropic
 python-dotenv
