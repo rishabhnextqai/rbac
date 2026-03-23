@@ -42,7 +42,20 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
         password = st.text_input("Temporary Password", type="password", key="inv_pw")
         ic1, ic2 = st.columns(2)
         role = ic1.selectbox("Role", ["user", "admin"], key="inv_role")
-        company = ic2.text_input("Company", value="Next Quarter", key="inv_company")
+
+        # Company dropdown from existing companies + option to add new
+        existing_companies = sorted(set(
+            u.get("company", "") for u in users if u.get("company")
+        ))
+        if not existing_companies:
+            existing_companies = ["Next Quarter"]
+        company_options = existing_companies + ["➕ Add new company..."]
+        selected_company = ic2.selectbox("Company", company_options, key="inv_company_select")
+
+        if selected_company == "➕ Add new company...":
+            company = st.text_input("New company name", key="inv_company_new")
+        else:
+            company = selected_company
 
         bc1, bc2 = st.columns(2)
         if bc1.button("Create & Link", type="primary", use_container_width=True):
