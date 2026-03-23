@@ -63,7 +63,12 @@ class AgentHandlerClient:
     def _post(self, path: str, body: dict) -> dict:
         with httpx.Client(timeout=30.0) as c:
             r = c.post(f"{AH_BASE_URL}/{path}", headers=self.headers, json=body)
-            r.raise_for_status()
+            if r.status_code >= 400:
+                try:
+                    detail = r.json()
+                except Exception:
+                    detail = r.text
+                raise Exception(f"{r.status_code}: {detail}")
             return r.json()
 
     def _patch(self, path: str, body: dict) -> dict:
