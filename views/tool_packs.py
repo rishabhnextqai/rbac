@@ -66,11 +66,6 @@ def render(ah_client: AgentHandlerClient):
     st.divider()
     st.markdown("### Create New Tool Pack")
 
-    if "pack_name" not in st.session_state:
-        st.session_state.pack_name = ""
-    if "pack_desc" not in st.session_state:
-        st.session_state.pack_desc = ""
-
     pack_name = st.text_input("Pack Name", placeholder="e.g. Sales Intelligence Pack", key="pack_name")
     pack_desc = st.text_area("Description", height=60, key="pack_desc")
 
@@ -176,8 +171,6 @@ def render(ah_client: AgentHandlerClient):
                     st.success(f"✅ Created **{result['name']}** with {len(connectors_payload)} connectors!")
                     st.session_state.creating_pack = False
                     st.session_state.selected_connectors = {}
-                    st.session_state.pack_name = ""
-                    st.session_state.pack_desc = ""
                     st.rerun()
                 except Exception as e:
                     st.error(f"Failed: {e}")
