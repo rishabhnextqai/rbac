@@ -16,7 +16,11 @@ SYSTEM_PROMPT = (
 def _to_openai_tools(ah_tools: list[dict]) -> list[dict]:
     funcs = []
     for t in ah_tools:
-        fn = {"type": "function", "function": {"name": t["name"], "description": t.get("description", "")}}
+        name = t["name"]
+        # Skip tools the LLM doesn't need — our code handles auth, validation is internal
+        if name.startswith("authenticate_") or name.endswith("validate_credential"):
+            continue
+        fn = {"type": "function", "function": {"name": name, "description": t.get("description", "")}}
         fn["function"]["parameters"] = t.get("inputSchema") or {"type": "object", "properties": {}}
         funcs.append(fn)
     return funcs
