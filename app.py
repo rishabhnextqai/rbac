@@ -35,7 +35,7 @@ if not _admin_user:
     _ah = AgentHandlerClient(AH_API_KEY, AH_TOOL_PACK_ID, "")
     _ah_id = _ah.create_or_find_registered_user(
         origin_user_id=admin_email, origin_user_name=admin_name,
-        shared_credential_group={"origin_company_id": "nq-admin", "origin_company_name": "Next Quarter"},
+        shared_credential_group={"origin_company_id": "Next Quarter", "origin_company_name": "Next Quarter"},
     )
 else:
     _ah_id = _admin_user.get("ah_registered_user_id", "")
