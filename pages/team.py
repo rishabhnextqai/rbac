@@ -12,9 +12,15 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
     st.subheader("Team Management")
     st.caption("Invite members. Each gets their own Agent Handler identity and isolated credentials.")
 
+    # Toggle invite form via session state
+    if "show_invite" not in st.session_state:
+        st.session_state.show_invite = False
+
     col1, col2 = st.columns([3, 1])
     with col2:
-        show_invite = st.button("Invite Member", use_container_width=True)
+        if st.button("Invite Member", use_container_width=True):
+            st.session_state.show_invite = not st.session_state.show_invite
+            st.rerun()
 
     # List users
     users = list_users()
@@ -34,23 +40,19 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
                 if user["ah_registered_user_id"]:
                     st.code(f"AH User ID: {user['ah_registered_user_id']}")
 
-                if user.get("ah_tool_pack_id"):
-                    st.code(f"Tool Pack: {user['ah_tool_pack_id']}")
-
-                # Edit role
                 if not is_current:
-                    col_a, col_b, col_c = st.columns(3)
+                    col_a, col_b = st.columns(2)
                     new_role = col_a.selectbox(
                         "Role", ["user", "admin"],
                         index=0 if user["role"] == "user" else 1,
                         key=f"role_{user['id']}"
                     )
-                    if col_b.button("Update Role", key=f"update_{user['id']}"):
+                    if col_a.button("Update Role", key=f"update_{user['id']}"):
                         update_user(user["id"], role=new_role)
                         st.success(f"Updated {user['name']} to {new_role}")
                         st.rerun()
 
-                    if col_c.button("Remove", key=f"del_{user['id']}"):
+                    if col_b.button("Remove", key=f"del_{user['id']}"):
                         delete_user(user["id"])
                         st.success(f"Removed {user['name']}")
                         st.rerun()
@@ -58,7 +60,7 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
         st.info("No team members yet.")
 
     # Invite form
-    if show_invite:
+    if st.session_state.show_invite:
         st.divider()
         st.markdown("### Invite New Member")
         st.info(
@@ -66,7 +68,7 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
             "with their own isolated credential space."
         )
 
-        with st.form("invite_user"):
+        with st.form("invite_user", clear_on_submit=True):
             name = st.text_input("Full Name", placeholder="John Doe")
             email = st.text_input("Email", placeholder="john@nextq.ai")
             password = st.text_input("Temporary Password", type="password")
@@ -74,14 +76,16 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
             role = col1.selectbox("Role", ["user", "admin"])
             company = col2.text_input("Company", value="Next Quarter")
 
-            if st.form_submit_button("Invite & Link to Agent Handler"):
+            submitted = st.form_submit_button("Invite & Link to Agent Handler")
+
+            if submitted:
                 if not name or not email or not password:
                     st.error("All fields required")
                 elif get_user_by_email(email):
                     st.error("Email already registered")
                 else:
                     # Create AH registered user
-                    with st.spinner("Creating Agent Handler user..."):
+                    try:
                         ah_user_id = ah_client.create_or_find_registered_user(
                             origin_user_id=email,
                             origin_user_name=name,
@@ -90,19 +94,27 @@ def render(ah_client: AgentHandlerClient, default_tool_pack_id: str):
                                 "origin_company_name": company or "Default",
                             },
                         )
+                    except Exception as e:
+                        ah_user_id = ""
+                        st.warning(f"AH user creation issue: {e}")
 
                     # Create local user
-                    user = create_user(
-                        email=email, name=name,
-                        password_hash=hash_password(password),
-                        role=role,
-                        ah_registered_user_id=ah_user_id,
-                        ah_tool_pack_id=default_tool_pack_id,
-                        company=company,
-                    )
+                    try:
+                        create_user(
+                            email=email, name=name,
+                            password_hash=hash_password(password),
+                            role=role,
+                            ah_registered_user_id=ah_user_id,
+                            ah_tool_pack_id=default_tool_pack_id,
+                            company=company,
+                        )
 
-                    if ah_user_id:
-                        st.success(f"✅ {name} invited and linked to Agent Handler ({ah_user_id[:12]}...)")
-                    else:
-                        st.warning(f"⚠️ {name} created locally but AH linking failed. Set AH User ID manually.")
-                    st.rerun()
+                        if ah_user_id:
+                            st.success(f"✅ {name} invited and linked to Agent Handler!")
+                        else:
+                            st.warning(f"⚠️ {name} created but AH linking failed.")
+
+                        st.session_state.show_invite = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to create user: {e}")
