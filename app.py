@@ -144,21 +144,21 @@ def main_app():
 
     # ── Page routing ──
     if page == "Playground":
-        from pages.playground import render as render_playground
+        from views.playground import render as render_playground
         render_playground(AH_API_KEY, OPENAI_API_KEY, AH_TOOL_PACK_ID)
 
     elif page == "Connectors" and is_admin:
-        from pages.connectors import render as render_connectors
+        from views.connectors import render as render_connectors
         admin_client = AgentHandlerClient(AH_API_KEY, AH_TOOL_PACK_ID, "")
         render_connectors(admin_client)
 
     elif page == "Tool Packs" and is_admin:
-        from pages.tool_packs import render as render_tool_packs
+        from views.tool_packs import render as render_tool_packs
         admin_client = AgentHandlerClient(AH_API_KEY, AH_TOOL_PACK_ID, "")
         render_tool_packs(admin_client)
 
     elif page == "Team" and is_admin:
-        from pages.team import render as render_team
+        from views.team import render as render_team
         admin_client = AgentHandlerClient(AH_API_KEY, AH_TOOL_PACK_ID, "")
         render_team(admin_client, AH_TOOL_PACK_ID)
 
