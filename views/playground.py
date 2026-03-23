@@ -1,117 +1,125 @@
-"""Playground — Chat with streaming. Available to ALL authenticated users."""
+"""Playground — Streaming chat with Agent Handler tools."""
 
 import streamlit as st
-import json
+import base64
 from openai import OpenAI
 from ah_client import AgentHandlerClient
 from agent import run_agent
+
+
+def _encode_token(token: str) -> str:
+    return base64.urlsafe_b64encode(token.encode()).decode().rstrip("=")
 
 
 def render(ah_api_key: str, openai_api_key: str, default_tool_pack_id: str):
     user = st.session_state.user
 
     if not user.get("ah_registered_user_id"):
-        st.error("Your account is not linked to Agent Handler. Ask your admin to set up your account.")
+        st.error("⚠️ Your account is not linked to Agent Handler. Contact your admin.")
         return
 
-    # Tool Pack selector
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.caption(f"Logged in as **{user['name']}** ({user['email']})")
-    with col2:
-        if st.button("Clear Chat", use_container_width=True):
-            st.session_state.chat_messages = []
-            st.rerun()
+    # ── Header ──
+    header_col1, header_col2, header_col3 = st.columns([2, 2, 1])
+    with header_col1:
+        st.markdown("### 🎯 Playground")
 
-    # Get tool packs for selector
+    # Tool Pack selector
     admin_client = AgentHandlerClient(ah_api_key, default_tool_pack_id, "")
     try:
         packs = admin_client.list_tool_packs()
     except Exception:
         packs = []
 
-    pack_options = {p["name"]: p["id"] for p in packs}
-    if not pack_options:
-        st.warning("No Tool Packs available. Ask your admin to create one.")
+    pack_map = {p["name"]: p["id"] for p in packs}
+    if not pack_map:
+        st.warning("No Tool Packs available.")
         return
 
-    selected_pack_name = st.selectbox(
-        "Tool Pack",
-        list(pack_options.keys()),
-        index=list(pack_options.values()).index(user.get("ah_tool_pack_id") or default_tool_pack_id)
-        if (user.get("ah_tool_pack_id") or default_tool_pack_id) in pack_options.values() else 0,
-    )
-    selected_pack_id = pack_options[selected_pack_name]
+    with header_col2:
+        default_idx = 0
+        user_pack = user.get("ah_tool_pack_id") or default_tool_pack_id
+        if user_pack in pack_map.values():
+            default_idx = list(pack_map.values()).index(user_pack)
+        selected_name = st.selectbox("Tool Pack", list(pack_map.keys()), index=default_idx, label_visibility="collapsed")
+        selected_pack_id = pack_map[selected_name]
 
-    # Per-user AH client
+    with header_col3:
+        if st.button("🗑️ Clear", use_container_width=True):
+            st.session_state.chat_messages = []
+            st.rerun()
+
+    # Per-user client
     ah_client = AgentHandlerClient(ah_api_key, selected_pack_id, user["ah_registered_user_id"])
 
-    # Show available tools in expander
-    with st.expander(f"Available Tools", expanded=False):
+    # ── Tools panel ──
+    with st.expander("🔧 Available Tools", expanded=False):
         try:
             tools = ah_client.list_tools()
             auth_tools = [t for t in tools if t["name"].startswith("authenticate_")]
             regular_tools = [t for t in tools if not t["name"].startswith("authenticate_")]
+
+            c1, c2 = st.columns(2)
+            c1.metric("Ready", len(regular_tools))
+            c2.metric("Need Auth", len(auth_tools))
+
             if regular_tools:
-                st.success(f"{len(regular_tools)} tools ready")
                 for t in regular_tools:
-                    st.markdown(f"- `{t['name']}` — {t.get('description', '')[:80]}")
+                    st.markdown(f"- `{t['name']}` — {t.get('description', '')[:100]}")
             if auth_tools:
-                st.warning(f"{len(auth_tools)} connectors need authentication")
-                for t in auth_tools:
-                    st.markdown(f"- `{t['name']}`")
+                st.warning("These connectors need authentication (will prompt during chat):")
+                st.markdown(", ".join(f"`{t['name'].replace('authenticate_','')}`" for t in auth_tools))
         except Exception as e:
             st.error(f"Failed to load tools: {e}")
 
     st.divider()
 
-    # Chat history
-    if "chat_messages" not in st.session_state:
-        st.session_state.chat_messages = []
-
+    # ── Chat history ──
     for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
+            if msg.get("content"):
+                st.markdown(msg["content"])
             if msg.get("tool_calls"):
                 for tc in msg["tool_calls"]:
-                    with st.expander(f"Tool: {tc['name']}", expanded=False):
-                        st.json(tc.get("args", {}))
+                    with st.expander(f"🔧 {tc['name']}", expanded=False):
+                        if tc.get("args"):
+                            st.caption("Arguments")
+                            st.json(tc["args"])
                         if tc.get("result"):
+                            st.caption("Result")
                             st.json(tc["result"])
             if msg.get("auth"):
-                st.info(f"Authentication required for **{msg['auth']['connector']}**")
-                link_token = msg["auth"]["link_token"]
-                st.code(f"Link Token: {link_token}", language=None)
+                conn = msg["auth"]["connector"]
+                token = msg["auth"]["link_token"]
+                st.info(f"🔑 **{conn.replace('_', ' ').title()}** needs authentication")
                 st.link_button(
-                    f"Connect {msg['auth']['connector'].title()}",
-                    f"https://ah-api.merge.dev/magic-link/{_encode_link_token(link_token)}/",
+                    f"Connect {conn.replace('_', ' ').title()}",
+                    f"https://ah-api.merge.dev/magic-link/{_encode_token(token)}/",
                 )
-            st.markdown(msg.get("content", ""))
+                st.caption("After connecting, send your request again.")
 
-    # Chat input
-    if prompt := st.chat_input("Ask anything... (tools from your Tool Pack are available)"):
+    # ── Chat input ──
+    if prompt := st.chat_input(f"Ask anything... ({selected_name} tools available)"):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Build history
         history = [{"role": m["role"], "content": m.get("content", "")}
                    for m in st.session_state.chat_messages[:-1]
                    if m["role"] in ("user", "assistant") and m.get("content")]
 
-        # Status container
-        status_container = st.empty()
-        tool_calls_collected = []
+        status_box = st.empty()
+        tool_calls = []
         auth_info = None
 
         def on_status(msg):
-            status_container.caption(f"⏳ {msg}")
+            status_box.caption(f"⏳ {msg}")
 
         def on_tool_call(name, args):
-            tool_calls_collected.append({"name": name, "args": args})
-            status_container.caption(f"🔧 Calling {name}...")
+            tool_calls.append({"name": name, "args": args})
+            status_box.caption(f"🔧 {name}...")
 
         def on_tool_result(name, result):
-            for tc in tool_calls_collected:
+            for tc in tool_calls:
                 if tc["name"] == name and "result" not in tc:
                     tc["result"] = result
                     break
@@ -120,45 +128,32 @@ def render(ah_api_key: str, openai_api_key: str, default_tool_pack_id: str):
             nonlocal auth_info
             auth_info = {"connector": connector, "link_token": link_token}
 
-        openai_client = OpenAI(api_key=openai_api_key)
-
         with st.chat_message("assistant"):
-            response_text = st.write_stream(
+            response = st.write_stream(
                 run_agent(
-                    user_message=prompt,
-                    history=history,
-                    ah_client=ah_client,
-                    openai_client=openai_client,
-                    on_status=on_status,
-                    on_tool_call=on_tool_call,
-                    on_tool_result=on_tool_result,
-                    on_auth_required=on_auth_required,
+                    user_message=prompt, history=history,
+                    ah_client=ah_client, openai_client=OpenAI(api_key=openai_api_key),
+                    on_status=on_status, on_tool_call=on_tool_call,
+                    on_tool_result=on_tool_result, on_auth_required=on_auth_required,
                 )
             )
 
-        status_container.empty()
+        status_box.empty()
 
-        # Save assistant message
-        assistant_msg = {"role": "assistant", "content": response_text or ""}
-        if tool_calls_collected:
-            assistant_msg["tool_calls"] = tool_calls_collected
+        msg = {"role": "assistant", "content": response or ""}
+        if tool_calls:
+            msg["tool_calls"] = tool_calls
         if auth_info:
-            assistant_msg["auth"] = auth_info
-        st.session_state.chat_messages.append(assistant_msg)
+            msg["auth"] = auth_info
+        st.session_state.chat_messages.append(msg)
 
-        # Show auth link if needed
         if auth_info:
-            st.info(f"🔗 Authentication required for **{auth_info['connector']}**")
-            link_token = auth_info["link_token"]
+            conn = auth_info["connector"]
+            token = auth_info["link_token"]
+            st.info(f"🔑 **{conn.replace('_', ' ').title()}** needs authentication")
             st.link_button(
-                f"Connect {auth_info['connector'].title()}",
-                f"https://ah-api.merge.dev/magic-link/{_encode_link_token(link_token)}/",
+                f"Connect {conn.replace('_', ' ').title()}",
+                f"https://ah-api.merge.dev/magic-link/{_encode_token(token)}/",
             )
-            st.caption("After authenticating, come back and try your request again.")
 
         st.rerun()
-
-
-def _encode_link_token(token: str) -> str:
-    import base64
-    return base64.urlsafe_b64encode(token.encode()).decode().rstrip("=")
