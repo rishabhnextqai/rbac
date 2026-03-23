@@ -66,6 +66,11 @@ def render(ah_client: AgentHandlerClient):
     st.divider()
     st.markdown("### Create New Tool Pack")
 
+    if "pack_name" not in st.session_state:
+        st.session_state.pack_name = ""
+    if "pack_desc" not in st.session_state:
+        st.session_state.pack_desc = ""
+
     pack_name = st.text_input("Pack Name", placeholder="e.g. Sales Intelligence Pack", key="pack_name")
     pack_desc = st.text_area("Description", height=60, key="pack_desc")
 
@@ -151,24 +156,31 @@ def render(ah_client: AgentHandlerClient):
 
     # ── Create / Cancel ──
     bc1, bc2 = st.columns(2)
-    if bc1.button("Create Tool Pack", type="primary", use_container_width=True, disabled=not pack_name or not selected):
-        connectors_payload = [
-            {
-                "connector_id": info["connector_id"],
-                "auth_scope": info["auth_scope"],
-                "tool_names": info["tool_names"],
-            }
-            for info in selected.values()
-        ]
-        with st.spinner("Creating..."):
-            try:
-                result = ah_client.create_tool_pack(pack_name, pack_desc, connectors_payload)
-                st.success(f"✅ Created **{result['name']}** with {len(connectors_payload)} connectors!")
-                st.session_state.creating_pack = False
-                st.session_state.selected_connectors = {}
-                st.rerun()
-            except Exception as e:
-                st.error(f"Failed: {e}")
+    if bc1.button("Create Tool Pack", type="primary", use_container_width=True):
+        if not pack_name:
+            st.error("Pack name is required")
+        elif not selected:
+            st.error("Add at least one connector")
+        else:
+            connectors_payload = [
+                {
+                    "connector_id": info["connector_id"],
+                    "auth_scope": info["auth_scope"],
+                    "tool_names": info["tool_names"],
+                }
+                for info in selected.values()
+            ]
+            with st.spinner("Creating..."):
+                try:
+                    result = ah_client.create_tool_pack(pack_name, pack_desc, connectors_payload)
+                    st.success(f"✅ Created **{result['name']}** with {len(connectors_payload)} connectors!")
+                    st.session_state.creating_pack = False
+                    st.session_state.selected_connectors = {}
+                    st.session_state.pack_name = ""
+                    st.session_state.pack_desc = ""
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
 
     if bc2.button("Cancel", use_container_width=True):
         st.session_state.creating_pack = False
