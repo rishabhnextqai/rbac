@@ -25,9 +25,8 @@ def _is_anthropic(model: str) -> bool:
 
 
 def _filter_tools(ah_tools: list[dict]) -> list[dict]:
-    """Remove auth/validate tools that our code handles."""
-    return [t for t in ah_tools
-            if not t["name"].startswith("authenticate_") and "validate_credential" not in t["name"]]
+    """Remove only validate_credential tools. Keep authenticate_* so the LLM can trigger auth."""
+    return [t for t in ah_tools if "validate_credential" not in t["name"]]
 
 
 def _to_openai_tools(tools: list[dict], max_tools: int = OPENAI_MAX_TOOLS) -> list[dict]:
