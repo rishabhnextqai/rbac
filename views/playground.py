@@ -97,7 +97,7 @@ def render(ah_api_key: str, openai_api_key: str, default_tool_pack_id: str):
     ah_client = AgentHandlerClient(ah_api_key, selected_pack_id, user["ah_registered_user_id"])
 
     # ── Tools panel ──
-    with st.expander("🔧 Available Tools", expanded=False):
+    with st.expander("🔧 Available Tools & Connections", expanded=False):
         try:
             tools = ah_client.list_tools()
             auth_tools = [t for t in tools if t["name"].startswith("authenticate_")]
@@ -106,14 +106,44 @@ def render(ah_api_key: str, openai_api_key: str, default_tool_pack_id: str):
             c1, c2, c3 = st.columns(3)
             c1.metric("Ready", len(regular_tools))
             c2.metric("Need Auth", len(auth_tools))
-            c3.metric("Sent to LLM", min(len(regular_tools), 128) if not is_anthropic else len(regular_tools))
+            c3.metric("Sent to LLM", min(len(regular_tools) + len(auth_tools), 128) if not is_anthropic else len(regular_tools) + len(auth_tools))
 
-            if regular_tools:
-                for t in regular_tools:
-                    st.markdown(f"- `{t['name']}` — {t.get('description', '')[:100]}")
+            # Group regular tools by connector
+            connected = set()
+            for t in regular_tools:
+                if "__" in t["name"]:
+                    connected.add(t["name"].split("__")[0])
+
+            if connected:
+                st.success(f"Connected: {', '.join(sorted(connected))}")
+
             if auth_tools:
-                st.warning("Connectors needing auth (will prompt during chat):")
-                st.markdown(", ".join(f"`{t['name'].replace('authenticate_','')}`" for t in auth_tools))
+                st.warning("Need authentication: " + ", ".join(f"**{t['name'].replace('authenticate_','')}**" for t in auth_tools))
+
+            # ── Disconnect / Reconnect ──
+            st.markdown("---")
+            st.markdown("**Manage Connections**")
+            st.caption("Disconnect a connector to re-authenticate (fixes expired tokens)")
+
+            all_connectors = list(connected)
+            if all_connectors:
+                dc1, dc2 = st.columns([3, 1])
+                disconnect_slug = dc1.selectbox("Connector", all_connectors, key="disconnect_slug", label_visibility="collapsed")
+                if dc2.button("🔌 Disconnect", use_container_width=True):
+                    try:
+                        ah_client.delete_user_credentials(disconnect_slug)
+                        st.success(f"Disconnected **{disconnect_slug}**. Ask the agent to use it and you'll get a new auth link.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+            else:
+                st.caption("No connected connectors to manage.")
+
+            # Tool list
+            with st.popover(f"📋 View all {len(regular_tools)} tools"):
+                for t in regular_tools:
+                    st.markdown(f"`{t['name']}` — {t.get('description', '')[:100]}")
+
         except Exception as e:
             st.error(f"Failed to load tools: {e}")
 
